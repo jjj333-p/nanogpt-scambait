@@ -150,7 +150,8 @@ async def main():
 
                         print(xmpp_conf)
                         if xmpp_conf:
-                            xmpp_body = f"`{' '.join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n> {'\n> '.join(body_lines)}"
+                            quote_part = '\n> '.join(body_lines)
+                            xmpp_body = f"`{' '.join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n> {quote_part}"
                             try:
                                 print(xmpp_body)
                                 xmpp.send_message(
@@ -204,7 +205,8 @@ async def main():
 
                         if response_body != "":
                             if xmpp_conf:
-                                xmpp_body = f"*Response to* `{" ".join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n> {'\n> '.join(response_body.splitlines())}"
+                                quote_part = '\n> '.join(response_body.splitlines())
+                                xmpp_body = f"*Response to* `{' '.join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n> {quote_part}"
                                 try:
                                     xmpp.send_message(
                                         mto=xmpp_conf["user"],
@@ -216,7 +218,8 @@ async def main():
                         elif xmpp_conf:
                             if err_str == "":
                                 err_str = str(response_obj)
-                            xmpp_body = f"Error getting response from LLM\n> {'\n> '.join(err_str.splitlines())}"
+                            quote_part = '\n> '.join(err_str.splitlines())
+                            xmpp_body = f"Error getting response from LLM\n> {quote_part}"
                             try:
                                 xmpp.send_message(
                                     mto=xmpp_conf["user"],
