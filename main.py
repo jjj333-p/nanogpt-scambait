@@ -19,12 +19,10 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
-from time import sleep, time
+from time import time
 
-# from ollama import chat
-# from ollama import ChatResponse
+import aiohttp
 import mailparser
-import requests
 
 from xmpp_bot import create_bot
 
@@ -47,30 +45,31 @@ headers = {
 
 
 # replacement for the ollama library, return string instead of object
-def chat(messages: list[dict[str, str]]) -> tuple[str, dict]:
+async def chat(messages: list[dict[str, str]]) -> tuple[str, dict]:
     data = {
         "model": login["model"],
         "messages": messages,
         "stream": False  # Disable streaming
     }
 
-    response = requests.post(
-        "https://nano-gpt.com/api/v1/chat/completions",
-        headers=headers,
-        json=data,
-        stream=False  # Disable streaming in requests
-    ).json()
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+                "https://nano-gpt.com/api/v1/chat/completions",
+                headers=headers,
+                json=data
+        ) as response:
+            response_json = await response.json()
 
     # hopefully error free parsing
-    resp_choices = response.get('choices', [])
+    resp_choices = response_json.get('choices', [])
     if len(resp_choices) < 1:
-        return "", response
+        return "", response_json
     choice = resp_choices[0]
     llm_message = choice.get('message')
     if not llm_message:
-        return "", response
+        return "", response_json
     llm_content = llm_message.get('content', '')
-    return llm_content, response
+    return llm_content, response_json
 
 
 xmpp_conf = login.get("xmpp_conf")
@@ -151,7 +150,7 @@ async def main():
 
                         print(xmpp_conf)
                         if xmpp_conf:
-                            xmpp_body = f"`{" ".join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n{'\n> '.join(body_lines)}"
+                            xmpp_body = f"`{" ".join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n> {'\n> '.join(body_lines)}"
                             try:
                                 print(xmpp_body)
                                 xmpp.send_message(
@@ -169,8 +168,8 @@ async def main():
 
                         # read in history from disk, or emplace default
                         if os.path.exists(f'./db/{encoded}.json'):
-                            with open(f'./db/{encoded}.json', 'r') as file:
-                                j = json.load(file)
+                            with open(f'./db/{encoded}.json', 'r') as f:
+                                j = json.load(f)
                                 history_load = j["history"]
                                 use_edited_sysprompt = j["use_edited_sysprompt"]
                         else:
@@ -197,14 +196,15 @@ async def main():
                         # compute response
                         response_body: str = ""
                         err_str: str = ""
+                        response_obj = {}
                         try:
-                            response_body, response_obj = chat(messages=history)
+                            response_body, response_obj = await chat(messages=history)
                         except Exception as e:
                             err_str: str = str(e)
 
                         if response_body != "":
                             if xmpp_conf:
-                                xmpp_body = f"*Response to* `{" ".join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n{'\n> '.join(response_body.splitlines())}"
+                                xmpp_body = f"*Response to* `{" ".join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n> {'\n> '.join(response_body.splitlines())}"
                                 try:
                                     xmpp.send_message(
                                         mto=xmpp_conf["user"],
@@ -214,9 +214,9 @@ async def main():
                                 except Exception as e:
                                     print("Error sending XMPP message:", e)
                         elif xmpp_conf:
-                            if err_str != "":
+                            if err_str == "":
                                 err_str = str(response_obj)
-                            xmpp_body = f"Error getting response from LLM\n{'\n> '.join(err_str.splitlines())}"
+                            xmpp_body = f"Error getting response from LLM\n> {'\n> '.join(err_str.splitlines())}"
                             try:
                                 xmpp.send_message(
                                     mto=xmpp_conf["user"],
@@ -258,12 +258,12 @@ async def main():
                             "system_prompt": sysprompt,
                         })
 
-                        with open(f'./db/{encoded}.json', 'w', encoding="utf-8") as file:
+                        with open(f'./db/{encoded}.json', 'w', encoding="utf-8") as f:
                             j = {
                                 "use_edited_sysprompt": use_edited_sysprompt,
                                 "history": history,
                             }
-                            json.dump(j, file, indent=4)
+                            json.dump(j, f, indent=4)
 
             mail.logout()
         except Exception as e:
@@ -274,7 +274,7 @@ async def main():
         dur = time() - start_time
         print(f'done run {run - 1} in {dur} seconds')
         if dur < 30:
-            sleep(30 - dur)
+            await asyncio.sleep(30 - dur)
 
 
 loop = asyncio.get_event_loop()
