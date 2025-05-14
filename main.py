@@ -150,7 +150,7 @@ async def main():
 
                         print(xmpp_conf)
                         if xmpp_conf:
-                            xmpp_body = f"`{" ".join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n> {'\n> '.join(body_lines)}"
+                            xmpp_body = f"`{' '.join(subject_by_words)}` sent by `{sender_name} <{sender}>`\n> {'\n> '.join(body_lines)}"
                             try:
                                 print(xmpp_body)
                                 xmpp.send_message(
